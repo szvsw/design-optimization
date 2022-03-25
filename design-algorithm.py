@@ -34,7 +34,7 @@ def updateComponent():
 def computeSim(geometry,parameters):
     print("start sim")
     cluster = gh.Kernel.Special.GH_Cluster()
-    cluster.CreateFromFilePath("C:\Users\Sam Wolk\Dropbox\mit\design-optimization\EUI_Computer_Cluster.ghcluster")
+    cluster.CreateFromFilePath(clusterPath)
     for i in range(len(geometry)):
         cluster.Params.Input[0].AddVolatileData(gh.Kernel.Data.GH_Path(0), i,geometry[i])
     cluster.Params.Input[1].AddVolatileData(gh.Kernel.Data.GH_Path(0), 0, parameters)
@@ -83,10 +83,7 @@ parameterMetadata = {
         'w':{'min':0,'max':1,'steps':20},
         'n':{'min':0,'max':1,'steps':20}
     }
- 
 }
-
-placeholder = {  }
 
 def generateParameterList(paramsToSkip=[]):
     parameterList = []
@@ -106,7 +103,7 @@ def generateParameterList(paramsToSkip=[]):
     return parameterList
     
 def runParameterTest(baseline,fixedParameters,parametersToTest,results):
-    testParameters = json.loads(buildingParameters)
+    testParameters = json.loads(baselineParameters)
     parameterToTest = parametersToTest.pop(0)
     category = parameterToTest['category']
     param = parameterToTest['parameter']
@@ -128,72 +125,50 @@ def runParameterTest(baseline,fixedParameters,parametersToTest,results):
     result['durationDelta'] = duration - baseline['duration']
     result['efficacy'] = result['euiDelta'] / (result['costDelta'] if result['costDelta'] != 0 else 1)
     results.append(result)
+    results.sort(key = lambda res : res['efficacy'])
     
 
 if 'baseline' not in globals() and run:
     start = time.time()
-    eui,cost = computeSim(geometry, buildingParameters)
+    eui,cost = computeSim(geometry, baselineParameters)
     duration = time.time() - start
-    baseline = {'eui':eui, 'cost':cost, 'duration':duration}
-    baselineResults = json.dumps(baseline)
+    baseline = {'eui':eui, 'cost':cost, 'duration':duration, 'category':'baseline','parameter':'baseline','value':0}
     
 if 'results' not in globals():
-    results = []
-
-if 'secondOrderResults' not in globals():
-    secondOrderResults = []
-
-if 'firstOrderComplete' not in globals(): 
-    firstOrderComplete = False
-
-if 'secondOrderComplete' not in globals():
-    secondOrderComplete = False
+    results = [[baseline],[]]
 
 if 'fixedParameters' not in globals():
     fixedParameters = []
 
+if 'parametersToTest' not in globals():
+    parametersToTest = [[],generateParameterList()]
 
-if 'firstOrderParametersToTest' not in globals():
-    firstOrderParametersToTest = generateParameterList()
+if 'generation' not in globals():
+    generation = 1
+    
+if run:
+    if len(parametersToTest[generation]) > 0:
+        runParameterTest(results[generation-1][0],fixedParameters,parametersToTest[generation],results[generation])
+    elif len(fixedParameters) == len(generateParameterList()):
+        run = False # Completed all runs
+        generation = generation-1
+    else: #finished a generation
+        bestParameter = results[generation][0]
+        fixedParameters.append(bestParameter)
+        results.append([])
+        parametersToTest.append(generateParameterList(fixedParameters))
+        generation = generation + 1
+        if len(parametersToTest[generation]) == 0:
+            run = False # Completed all parameters)
 
-if 'secondOrderParametersToTest' not in globals():
-    secondOrderParametersToTest = []
-
-if len(firstOrderParametersToTest) > 0 and run:
-    runParameterTest(baseline,fixedParameters,firstOrderParametersToTest,results)
-
-results.sort(key = lambda res : res['efficacy'])
-
-if len(firstOrderParametersToTest) == 0 and len(results)>0 and not firstOrderComplete:
-    firstOrderComplete = True
-
-
-
-if firstOrderComplete and len(secondOrderParametersToTest) == 0 and not secondOrderComplete:
-    bestFirstOrder = results[0]
-    fixedParameters.append(bestFirstOrder)
-    secondOrderParametersToTest = generateParameterList(paramsToSkip=fixedParameters)
-
-
-
-if len(secondOrderParametersToTest) > 0 and run:
-    runParameterTest(results[0],fixedParameters,secondOrderParametersToTest,secondOrderResults)
-
-secondOrderResults.sort(key = lambda res : res['efficacy'])
-
-if len(secondOrderParametersToTest) == 0 and len(secondOrderResults)>0 and not secondOrderComplete:
-    secondOrderComplete = True
-
-
-efficacies = [result['efficacy'] for result in results]
-labels = [result['parameter'] for result in results]
-euis = [result['eui'] for result in results]
-costs = [result['cost'] for result in results]
-
-efficacies2 = [result['efficacy'] for result in secondOrderResults]
-labels2 = [result['parameter'] for result in secondOrderResults]
-euis2 = [result['eui'] for result in secondOrderResults]
-costs2 = [result['cost'] for result in secondOrderResults]
+efficacies = [result['efficacy'] for result in results[generation]]
+labels = [result['parameter'] for result in results[generation]]
+euis = [result['eui'] for result in results[generation]]
+costs = [result['cost'] for result in results[generation]]
+selections = ["["+parameter['category']+"] "+parameter['parameter']+": "+str(parameter['value']) for parameter in fixedParameters]
+euiHistory = [generationResults[0]['eui'] for generationResults in results[0:-1]]
+costHistory = [generationResults[0]['cost'] for generationResults in results[0:-1]]
+labelHistory = ["baseline"]+[parameter['parameter'] for parameter in fixedParameters]
 
 if run:
     updateComponent()
