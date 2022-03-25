@@ -85,39 +85,44 @@ parameterMetadata = {
     },
 }
 
-if 'baseline' not in globals():
+if 'baseline' not in globals() and run:
     start = time.time()
     eui,cost = computeSim(geometry, buildingParameters)
     duration = time.time() - start
     baseline = {'eui':eui, 'cost':cost, 'duration':duration}
-
-baselineResults = json.dumps(baseline)
+    baselineResults = json.dumps(baseline)
     
 if 'results' not in globals():
     results = []
+    
+if 'firstOrderComplete' not in globals(): 
+    firstOrderComplete = False
+
+if 'fixedParameters' not in globals():
+    fixedParameters = []
     
 if 'firstOrderParametersToTest' not in globals():
     firstOrderParametersToTest = []
     for (category,parameters) in parameterMetadata.items():
         for (parameter,data) in parameters.items():
-            key = category+"-"+parameter
             value = data['max']
-            keyVal = {'key':key,'value':value}
-            firstOrderParametersToTest.append(keyVal)
+            parameterToTest = {'category':category,'parameter':parameter,'value':value}
+            firstOrderParametersToTest.append(parameterToTest)
     random.shuffle(firstOrderParametersToTest)
 
 testParameters = json.loads(buildingParameters)
 
 if len(firstOrderParametersToTest) > 0 and run:
     parameterToTest = firstOrderParametersToTest.pop(0)
-    category = parameterToTest['key'].split("-")[0]
-    param = parameterToTest['key'].split("-")[1]
+    category = parameterToTest['category']
+    param = parameterToTest['parameter']
     testParameters[category][param] = parameterToTest['value']
     start = time.time()
     eui,cost = computeSim(geometry,json.dumps(testParameters))
     duration = time.time() - start
     result = {}
-    result['key'] = parameterToTest['key']
+    result['category'] = parameterToTest['category']
+    result['parameter'] = parameterToTest['parameter']
     result['value'] = parameterToTest['value']
     result['eui'] = eui
     result['cost'] = cost
@@ -131,10 +136,15 @@ if len(firstOrderParametersToTest) > 0 and run:
 out = json.dumps(results)
 results.sort(key = lambda res : res['efficacy'])
 
+if len(firstOrderParametersToTest) == 0 and len(results)>0 and not firstOrderComplete:
+    firstOrderComplete = True
+
+if firstOrderComplete and len(fixedParameters) < 1:
+    pass
 
     
 efficacies = [result['efficacy'] for result in results]
-labels = [result['key'] for result in results]
+labels = [result['parameter'] for result in results]
 euis = [result['eui'] for result in results]
 costs = [result['cost'] for result in results]
 
